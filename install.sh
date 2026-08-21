@@ -300,6 +300,38 @@ pkg_install() {
   esac
 }
 
+# Distribution defaults can be too old for the workshop skills, and on Ubuntu
+# `apt install nodejs` does not install npm. Use NodeSource's Node 22 channel on
+# apt systems; the other supported managers get npm explicitly when needed.
+install_node_package() {
+  local fetch_cmd
+  case "$PKG" in
+    apt)
+      if have curl; then fetch_cmd="curl -fsSL"; else fetch_cmd="wget -qO-"; fi
+      if [ -n "$PKG_SUDO" ]; then
+        run_sh "$fetch_cmd https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+      else
+        run_sh "$fetch_cmd https://deb.nodesource.com/setup_22.x | bash -"
+      fi
+      pkg_install nodejs
+      ;;
+    *)
+      pkg_install "$(pkg_name_for node)" || return 1
+      if [ "$DRY_RUN" != "1" ] && ! have npm; then
+        pkg_install npm
+      fi
+      ;;
+  esac
+
+  if [ "$DRY_RUN" != "1" ]; then
+    have npm || { warn "Node installed without npm"; return 1; }
+    [ "$(node_major)" -ge "$NODE_MIN_MAJOR" ] || {
+      warn "installed Node is older than v$NODE_MIN_MAJOR"
+      return 1
+    }
+  fi
+}
+
 # Package names differ per manager for exactly one of our three tools.
 pkg_name_for() {
   case "$1:$PKG" in
@@ -436,8 +468,18 @@ install_prereqs() {
     fi
 
     [ "$tool" = "rg" ] && tool="ripgrep"
-    pkg="$(pkg_name_for "$tool")"
     info "installing $label"
+    if [ "$tool" = "node" ]; then
+      if install_node_package; then
+        INSTALLED+=("$label")
+        ok "$label installed"
+      else
+        SKIPPED+=("$label (install failed)")
+        warn "could not install $label; continuing"
+      fi
+      continue
+    fi
+    pkg="$(pkg_name_for "$tool")"
     if pkg_install "$pkg"; then
       INSTALLED+=("$label")
       ok "$label installed"

@@ -77,7 +77,7 @@ notepad install.ps1
 | Package manager | Homebrew (installed if missing) | winget (Node still installs without it) | apt / dnf / pacman / zypper |
 | Build tools | Xcode Command Line Tools | not applicable | not applicable |
 | `git` | via Homebrew | `Git.Git` | via system package manager |
-| Node LTS (for MCP servers) | via Homebrew | `OpenJS.NodeJS.LTS`, falling back to the nodejs.org `.msi` | via system package manager |
+| Node LTS (for MCP servers and skills) | via Homebrew | `OpenJS.NodeJS.LTS`, falling back to the nodejs.org `.msi` | NodeSource Node 22 on apt; native package manager elsewhere |
 | `ripgrep` (fast search) | via Homebrew | `BurntSushi.ripgrep.MSVC` | via system package manager |
 | Codex CLI | `npm install --global --prefix ~/.local @openai/codex@latest` | `npm install --global @openai/codex@latest` | same as macOS |
 | `PATH` | appended to your shell rc, once | refreshed from the registry | appended to your shell rc, once |

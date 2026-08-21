@@ -52,6 +52,11 @@ if grep -q "'.agents'" install.ps1 && ! grep -q '\.claude' install.ps1; then
 else
   fail "PowerShell installer contains a stale or incorrect skill destination"
 fi
+if grep -q 'deb.nodesource.com/setup_22.x' install.sh; then
+  pass "apt path installs Node 22 with npm"
+else
+  fail "apt path does not provide a current Node and npm"
+fi
 
 head2 "5. --help exits clean"
 if bash install.sh --help >/dev/null 2>&1; then pass "--help works"; else fail "--help failed"; fi
