@@ -1,0 +1,7 @@
+# Legacy source material from the original installer clone stays local only.
+/demo/
+/preset/
+*.ascii
+
+# OS noise
+.DS_Store

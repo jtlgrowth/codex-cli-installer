@@ -1,0 +1,166 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shell:
+    name: shell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install shellcheck
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck
+
+      - name: Smoke tests
+        run: bash test/smoke.sh
+
+  powershell:
+    name: powershell (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          Write-Host "install.ps1 parses"
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          $bad = 0
+          foreach ($f in @('./install.ps1', './test/skill-install.ps1')) {
+            $results = Invoke-ScriptAnalyzer -Path $f -Severity Error,Warning `
+              -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingInvokeExpression
+            if ($results) { Write-Host "findings in $f"; $results | Format-Table -AutoSize | Out-String | Write-Host; $bad++ }
+          }
+          if ($bad) { exit 1 }
+          Write-Host "PSScriptAnalyzer clean"
+
+      - name: Dry run exits 0
+        shell: pwsh
+        env:
+          CXI_DRY_RUN: '1'
+          CXI_YES: '1'
+        run: |
+          ./install.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error "dry run exited $LASTEXITCODE"; exit 1 }
+
+      - name: Dry run (--skills hire, and via the env var)
+        shell: pwsh
+        run: |
+          ./install.ps1 -DryRun -Yes -Skills hire
+          $env:CXI_SKILLS = 'hire,setup'
+          ./install.ps1 -DryRun -Yes
+
+      # The cmd.exe form documented in the README, run through a real cmd.exe.
+      # A quoting mistake here is invisible from pwsh - cmd has its own rules for
+      # quotes and for the pipe - and would only surface on a student's machine.
+      - name: The Command Prompt one-liner parses in cmd.exe
+        shell: cmd
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CXI_SKILLS='hire,setup'; $env:CXI_DRY_RUN='1'; $env:CXI_YES='1'; ./install.ps1"
+          if errorlevel 1 exit /b 1
+
+      # The Windows half of the student one-liner. This is the only job that
+      # runs it on Windows at all, so it downloads and extracts for real.
+      - name: Install the hire skill for real
+        shell: pwsh
+        run: |
+          $env:CXI_SKILLS = 'hire,setup'
+          $env:CXI_YES = '1'
+          ./install.ps1
+          $skill = Join-Path $env:USERPROFILE '.agents\skills\hire\SKILL.md'
+          if (-not (Test-Path $skill)) { Write-Error "hire skill not installed at $skill"; exit 1 }
+          node (Join-Path $env:USERPROFILE '.agents\skills\hire\test\tests.mjs')
+          if ($LASTEXITCODE -ne 0) { Write-Error "hire's own tests failed"; exit 1 }
+          $setup = Join-Path $env:USERPROFILE '.agents\skills\setup\SKILL.md'
+          if (-not (Test-Path $setup)) { Write-Error "setup skill not installed at $setup"; exit 1 }
+          node (Join-Path $env:USERPROFILE '.agents\skills\setup\test\tests.mjs')
+          if ($LASTEXITCODE -ne 0) { Write-Error "setup's own tests failed"; exit 1 }
+          Write-Host "hire + setup installed and their tests pass on Windows"
+
+      - name: Re-running must leave the skill alone
+        shell: pwsh
+        run: |
+          $skill = Join-Path $env:USERPROFILE '.agents\skills\hire'
+          $before = (Get-ChildItem $skill -Recurse -File).Count
+          $env:CXI_SKILLS = 'hire'; $env:CXI_YES = '1'
+          # *>&1 merges the information stream: the installer reports through
+          # Write-Host, which a plain pipeline does not capture.
+          $out = ./install.ps1 *>&1 | Out-String
+          $after = (Get-ChildItem $skill -Recurse -File).Count
+          if ($before -ne $after) { Write-Error "file count changed $before -> $after"; exit 1 }
+          if ($out -notmatch 'already present') { Write-Error "re-run did not report the skill as present"; exit 1 }
+          Write-Host "re-run left the skill alone ($after files)"
+
+      # Run in a child process so the script's own exit code is observable —
+      # dot-sourcing it into this step would surface a throw, not an exit code.
+      - name: Invalid skill is rejected with exit 2
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./install.ps1 -DryRun -Yes -Skills nope
+          if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }
+          Write-Host "invalid skill rejected with exit 2"
+          exit 0
+
+  install-linux:
+    name: real install (ubuntu container)
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Bootstrap curl
+        run: apt-get update && apt-get install -y curl ca-certificates sudo
+
+      - uses: actions/checkout@v5
+
+      - name: Install for real, with the skill the students get
+        env:
+          CXI_YES: '1'
+          CXI_SKILLS: hire,setup
+        run: bash install.sh
+
+      - name: The hire skill is installed and its own tests pass
+        run: |
+          test -f "$HOME/.agents/skills/hire/SKILL.md" || { echo "hire not installed"; exit 1; }
+          node "$HOME/.agents/skills/hire/test/tests.mjs"
+          test -f "$HOME/.agents/skills/setup/SKILL.md" || { echo "setup not installed"; exit 1; }
+          node "$HOME/.agents/skills/setup/test/tests.mjs"
+
+      - name: Verify Codex is on PATH
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          codex --version
+
+      - name: Re-run must be idempotent
+        env:
+          CXI_YES: '1'
+          CXI_SKILLS: hire,setup
+        run: |
+          before=$(grep -c 'codex-cli-installer' "$HOME/.bashrc" || true)
+          files_before=$(find "$HOME/.agents/skills/hire" -type f | wc -l)
+          bash install.sh
+          after=$(grep -c 'codex-cli-installer' "$HOME/.bashrc" || true)
+          files_after=$(find "$HOME/.agents/skills/hire" -type f | wc -l)
+          echo "marker count: $before -> $after   skill files: $files_before -> $files_after"
+          [ "$before" = "$after" ] || { echo "shell rc grew on re-run"; exit 1; }
+          [ "$files_before" = "$files_after" ] || { echo "skill was re-downloaded"; exit 1; }
