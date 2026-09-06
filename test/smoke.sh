@@ -90,7 +90,7 @@ head2 "8. --skills"
 for variant in "--skills hire" "--skills=hire" "--skills hire,setup"; do
   # shellcheck disable=SC2086
   if out="$(bash install.sh --dry-run --minimal $variant 2>&1)"; then
-    if printf '%s' "$out" | grep -qE "would download:.*codeload\.github\.com/jtlgrowth/hire|skill hire already installed"; then
+    if printf '%s' "$out" | grep -qE "would download:.*codeload\.github\.com/jtlgrowth/jtl|skill hire already installed"; then
       pass "'$variant' plans the hire download"
     else
       fail "'$variant' did not plan a skill install"
@@ -101,7 +101,7 @@ for variant in "--skills hire" "--skills=hire" "--skills hire,setup"; do
 done
 
 out="$(CXI_SKILLS=hire bash install.sh --dry-run --minimal 2>&1)"
-if printf '%s' "$out" | grep -qE "would download:.*jtlgrowth/hire|skill hire already installed"; then
+if printf '%s' "$out" | grep -qE "would download:.*jtlgrowth/jtl|skill hire already installed"; then
   pass "CXI_SKILLS=hire works via the env var"
 else
   fail "CXI_SKILLS was ignored"

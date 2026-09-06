@@ -147,7 +147,7 @@ irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install
 
 ## Skills
 
-`--skills hire` installs [`hire`](https://github.com/jtlgrowth/hire) into
+`--skills hire` installs [`hire`](https://github.com/jtlgrowth/jtl/tree/main/skills/hire) into
 `~/.agents/skills/hire`, which is where Codex looks for user skills. Start a new Codex session,
 then say `Use $hire to hire my first AI employee.`
 
