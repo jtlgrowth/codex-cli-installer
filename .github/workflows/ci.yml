@@ -99,6 +99,28 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "setup's own tests failed"; exit 1 }
           Write-Host "hire + setup installed and their tests pass on Windows"
 
+      # A Codex student's next steps, each in a fresh window: codex runs, /setup
+      # makes the alias, then a NEW window finds it in PowerShell and in cmd. The
+      # alias lives in ~/.local/bin, which this installer never adds to PATH, so
+      # this proves setup.mjs saves it. PATH is rebuilt from the registry each
+      # time, which is what a new window does.
+      - name: A new window finds codex and the vee alias (PowerShell and cmd)
+        shell: pwsh
+        run: |
+          function New-Window { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') }
+          New-Window
+          $cv = (codex --version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { Write-Error "codex not found from a new window: $cv"; exit 1 }
+          node (Join-Path $env:USERPROFILE '.agents\skills\setup\scripts\setup.mjs') --host codex --name Vee --alias vee
+          if ($LASTEXITCODE -ne 0) { Write-Error "setup --alias failed"; exit 1 }
+          New-Window
+          $pv = (vee --version 2>&1 | Out-String).Trim()
+          if ($pv -ne $cv) { Write-Error "vee in PowerShell printed '$pv', codex printed '$cv'"; exit 1 }
+          $mv = (cmd /c "vee --version" 2>&1 | Out-String).Trim()
+          if ($mv -ne $cv) { Write-Error "vee in cmd printed '$mv', codex printed '$cv'"; exit 1 }
+          Write-Host "new window: $cv, vee works in PowerShell and cmd"
+          exit 0
+
       - name: Re-running must leave the skill alone
         shell: pwsh
         run: |
