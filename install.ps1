@@ -46,13 +46,13 @@ $NodeMinMajor      = 20
 # flag, so an irm|iex installer never becomes an arbitrary-code downloader.
 $SkillCatalog = @{
     hire = @{
-        Url    = 'https://codeload.github.com/jtlgrowth/hire/tar.gz/refs/heads/main'
-        Member = 'hire-main/skills/hire'
+        Url    = 'https://codeload.github.com/jtlgrowth/jtl/tar.gz/refs/heads/main'
+        Member = 'jtl-main/skills/hire'
         Strip  = 2
     }
     setup = @{
-        Url    = 'https://codeload.github.com/jtlgrowth/hire/tar.gz/refs/heads/main'
-        Member = 'hire-main/skills/setup'
+        Url    = 'https://codeload.github.com/jtlgrowth/jtl/tar.gz/refs/heads/main'
+        Member = 'jtl-main/skills/setup'
         Strip  = 2
     }
 }
