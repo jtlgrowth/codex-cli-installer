@@ -71,10 +71,10 @@ jobs:
         shell: pwsh
         run: |
           $out = ./install.ps1 -DryRun -Yes -Skills hire *>&1 | Out-String
-          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "-Skills did not print the notice"; exit 1 }
+          if ($out -notmatch 'does not install skills') { Write-Error "-Skills did not print the notice"; exit 1 }
           $env:CXI_SKILLS = 'hire,setup'
           $out = ./install.ps1 -DryRun -Yes *>&1 | Out-String
-          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "CXI_SKILLS did not print the notice"; exit 1 }
+          if ($out -notmatch 'does not install skills') { Write-Error "CXI_SKILLS did not print the notice"; exit 1 }
           Write-Host "old skill commands print the notice"
           exit 0
 
