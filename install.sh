@@ -6,14 +6,13 @@
 #   curl -fsSL https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.sh | bash
 #
 # Flags (or env vars, for piped use):
-#   --skills hire,setup  CXI_SKILLS=hire,setup   also install agent skills (comma-separated)
 #   --minimal      CXI_MINIMAL=1      skip package manager + git/node/ripgrep
 #   --yes          CXI_YES=1          non-interactive, assume yes
 #   --dry-run      CXI_DRY_RUN=1      print every command, execute none
 #   --help
 #
 # OpenAI publishes Codex CLI as @openai/codex. This installer adds the
-# prerequisites, user-writable npm prefix, skills, PATH, and verification.
+# prerequisites, user-writable npm prefix, PATH, and verification.
 
 set -Eeuo pipefail
 
@@ -108,32 +107,11 @@ ask() {
 
 # ------------------------------------------------------------------ skills ----
 
-# The skill allowlist. A name maps to a tarball, the directory inside it, and how
-# many leading path components to strip.
-#
-# Deliberately a case statement and not a JSON manifest: this repo has no jq
-# dependency anywhere and should not grow one for a table this size. Deliberately
-# an allowlist and not a --skills <url> flag: that would turn a curl-to-bash
-# installer into an arbitrary-code downloader.
-skill_source() {
-  case "$1" in
-    hire)
-      # jtlgrowth/hire was archived 2026-08-29; hire+setup live on in jtlgrowth/jtl.
-      echo "https://codeload.github.com/jtlgrowth/jtl/tar.gz/refs/heads/main"
-      echo "jtl-main/skills/hire"
-      echo "2"
-      ;;
-    setup)
-      # Same repo, second skill: name + standing rules in ~/.codex/AGENTS.md.
-      echo "https://codeload.github.com/jtlgrowth/jtl/tar.gz/refs/heads/main"
-      echo "jtl-main/skills/setup"
-      echo "2"
-      ;;
-    *) return 1 ;;
-  esac
-}
-
-known_skills() { printf 'known skills: hire, setup'; }
+# The workshop skills no longer install from this public installer. They are
+# private, and the key-gated Claude Code installer carries them for Codex too.
+# --skills / CXI_SKILLS still parse so an old copied command installs Codex
+# and says where the skills went, instead of failing on an unknown flag.
+SKILLS_MOVED_URL="https://jtlgrowth.com/skills/"
 
 usage() {
   cat <<USAGE
@@ -143,14 +121,13 @@ macOS / Linux / WSL / Git Bash.
   curl -fsSL $REPO_RAW/install.sh | bash
 
 Flags (or env vars, for piped use):
-  --skills hire,setup  CXI_SKILLS=hire,setup   also install agent skills (comma-separated)
   --minimal      CXI_MINIMAL=1     skip package manager + git/node/ripgrep
   --yes          CXI_YES=1         non-interactive, assume yes
   --dry-run      CXI_DRY_RUN=1     print every command, execute none
   --help         show this
 
 OpenAI publishes Codex CLI as @openai/codex. This installer adds the
-prerequisites, skills, PATH, and a real verification step.
+prerequisites, PATH, and a real verification step.
 USAGE
   exit 0
 }
@@ -160,18 +137,9 @@ USAGE
 while [ $# -gt 0 ]; do
   case "$1" in
     --skills)
-      if [ $# -lt 2 ] || [ -z "$2" ]; then
-        err "--skills needs a value ($(known_skills))"
-        exit 2
-      fi
-      SKILLS="$2"; shift 2 ;;
+      SKILLS="${2:-retired}"; [ $# -ge 2 ] && shift; shift ;;
     --skills=*)
-      SKILLS="${1#*=}"
-      if [ -z "$SKILLS" ]; then
-        err "--skills needs a value ($(known_skills))"
-        exit 2
-      fi
-      shift ;;
+      SKILLS="${1#*=}"; SKILLS="${SKILLS:-retired}"; shift ;;
     --minimal)  MINIMAL=1; shift ;;
     --yes|-y)   ASSUME_YES=1; shift ;;
     --dry-run)  DRY_RUN=1; shift ;;
@@ -179,17 +147,6 @@ while [ $# -gt 0 ]; do
     *) err "unknown option: $1"; say "Run with --help for usage."; exit 2 ;;
   esac
 done
-
-# Reject an unknown skill before anything is installed, not halfway through.
-if [ -n "$SKILLS" ]; then
-  for _s in $(printf '%s' "$SKILLS" | tr ',' ' '); do
-    if ! skill_source "$_s" >/dev/null 2>&1; then
-      err "unknown skill: $_s ($(known_skills))"
-      exit 2
-    fi
-  done
-  unset _s
-fi
 
 # -------------------------------------------------------------- preflight ----
 
@@ -571,97 +528,14 @@ install_codex() {
   return 0
 }
 
-# --------------------------------------------------------------- download ----
-
-fetch_to() {
-  local url="$1" dest="$2"
-  if [ "$DRY_RUN" = "1" ]; then
-    printf '%s  would download:%s %s -> %s\n' "$C_DIM" "$C_RESET" "$url" "$dest"
-    return 0
-  fi
-  if have curl; then
-    curl -fsSL "$url" -o "$dest"
-  else
-    wget -qO "$dest" "$url"
-  fi
-}
-
 # ------------------------------------------------------------------ skills ----
-
-# Skills live in ~/.agents/skills/<name>. That path makes $<name> resolve in Codex.
-install_one_skill() {
-  local name="$1" url member strip dest tmp
-  { read -r url; read -r member; read -r strip; } < <(skill_source "$name")
-  dest="$HOME/.agents/skills/$name"
-
-  # Already there: leave it alone and say so. Re-running this installer is
-  # something people do (the first run scrolls past), and it must never
-  # overwrite a skill someone has been editing.
-  if [ -e "$dest" ]; then
-    warn "skill $name already installed at $dest; left alone"
-    SKIPPED+=("skill $name (already present)")
-    return 0
-  fi
-
-  if [ "$DRY_RUN" = "1" ]; then
-    printf '%s  would download:%s %s\n' "$C_DIM" "$C_RESET" "$url"
-    printf '%s  would extract:%s  %s -> %s\n' "$C_DIM" "$C_RESET" "$member" "$dest"
-    return 0
-  fi
-
-  run mkdir -p "$HOME/.agents/skills"
-  tmp="$(mktemp "${TMPDIR:-/tmp}/cxi-skill-XXXXXX.tgz")"
-
-  # Download to a file, then extract. Piping curl straight into tar hides
-  # curl's exit code behind tar's, so a 404 looks like a corrupt archive.
-  if ! fetch_to "$url" "$tmp"; then
-    rm -f "$tmp"
-    warn "could not download skill $name"
-    SKIPPED+=("skill $name (download failed)")
-    return 0
-  fi
-
-  if ! tar -xzf "$tmp" -C "$HOME/.agents/skills" --strip-components="$strip" "$member" 2>/dev/null; then
-    rm -f "$tmp"
-    warn "could not extract skill $name"
-    SKIPPED+=("skill $name (extract failed)")
-    return 0
-  fi
-  rm -f "$tmp"
-
-  # Prove it, rather than trusting that tar exited 0 over the right paths.
-  if [ ! -f "$dest/SKILL.md" ]; then
-    warn "skill $name extracted but has no SKILL.md; removing"
-    rm -rf "$dest"
-    SKIPPED+=("skill $name (no SKILL.md)")
-    return 0
-  fi
-
-  INSTALLED+=("skill $name")
-  ok "installed $dest"
-}
 
 install_skills() {
   [ -z "$SKILLS" ] && return 0
   step "Skills"
-
-  if ! have tar; then
-    warn "tar not found; cannot install skills"
-    SKIPPED+=("skills (no tar)")
-    return 0
-  fi
-
-  for name in $(printf '%s' "$SKILLS" | tr ',' ' '); do
-    install_one_skill "$name"
-  done
-
-  # A skill is Markdown plus scripts, and the scripts need a runtime. --minimal
-  # and Git Bash both skip the Node install, so say it plainly here instead of
-  # leaving someone with a skill that cannot run.
-  if ! have node; then
-    warn "node is not installed. Skills that ship scripts will not run"
-    say "     install Node 20+ and re-open your terminal"
-  fi
+  warn "the workshop skills no longer install from here"
+  say "     open $SKILLS_MOVED_URL, enter your workshop code, run the Codex line there"
+  SKIPPED+=("skills (moved to $SKILLS_MOVED_URL)")
 }
 
 # ----------------------------------------------------------------- verify ----

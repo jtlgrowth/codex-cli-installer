@@ -29,19 +29,19 @@ for your platform, what to do next, and what to do when it does not work.
 **macOS / Linux / WSL / Git Bash**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.sh | CXI_SKILLS=hire,setup bash
+curl -fsSL https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.sh | bash
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-$env:CXI_SKILLS='hire,setup'; irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex
 ```
 
 **Windows (Command Prompt / `cmd.exe`)**
 
 ```bat
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CXI_SKILLS='hire,setup'; irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex"
 ```
 
 Windows Terminal opens whichever profile is set as the default, and on plenty of machines that is
@@ -129,7 +129,6 @@ Because a piped script has no command-line arguments, every flag has an environm
 
 | Flag | Environment variable | Effect |
 | --- | --- | --- |
-| `--skills hire,setup` | `CXI_SKILLS=hire,setup` | also install agent skills into `~/.agents/skills/` (comma-separated; known: `hire`, `setup`; never overwrites an existing skill) |
 | `--minimal` | `CXI_MINIMAL=1` | skip the package manager and `git`/`node`/`ripgrep`; install Codex CLI only |
 | `--yes` | `CXI_YES=1` | non-interactive, answer yes to everything |
 | `--dry-run` | `CXI_DRY_RUN=1` | print every command, execute none |
@@ -145,27 +144,12 @@ curl -fsSL https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/
 irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex
 ```
 
-## Skills
+## Workshop skills
 
-`--skills hire` installs [`hire`](https://github.com/jtlgrowth/jtl/tree/main/skills/hire) into
-`~/.agents/skills/hire`, which is where Codex looks for user skills. Start a new Codex session,
-then say `Use $hire to hire my first AI employee.`
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.sh | CXI_SKILLS=hire,setup bash
-```
-
-```powershell
-$env:CXI_SKILLS = 'hire,setup'; irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install.ps1 | iex
-```
-
-Known skills: `hire`, `setup`. The list is an allowlist in the script rather than a
-`--skills <url>` flag, because a `curl | bash` installer that downloads arbitrary URLs is
-a different and much worse thing than one that installs a named, reviewable list.
-
-A skill that is already installed is left alone and reported as such. Re-running the line
-is safe. Skills ship scripts, so they need Node, which this installer already sets up
-unless you pass `--minimal`.
+The JTL workshop skills are private and no longer install from this repository. Workshop
+attendees get them at [jtlgrowth.com/skills](https://jtlgrowth.com/skills/) with the code from
+the room. An old command that still passes `--skills` or `CXI_SKILLS` installs Codex as usual
+and prints that link.
 
 ## Troubleshooting
 
@@ -199,9 +183,9 @@ Under `sudo`, files would land in root's home and `codex` would not exist in you
 
 | Platform | What was actually run |
 | --- | --- |
-| macOS (Apple Silicon) | shell parse, shellcheck, dry runs, skill tests, and `codex --version` verified locally |
-| Ubuntu 24.04 | real-install CI job defined for Codex CLI plus both skills; it runs after this repository is published |
-| Windows Server | PowerShell parse, analyzer, Command Prompt quoting, real-install, and skill-test CI jobs defined; they run after publication |
+| macOS (Apple Silicon) | shell parse, shellcheck, dry runs, and `codex --version` verified locally |
+| Ubuntu 24.04 | real-install CI job for Codex CLI |
+| Windows Server | PowerShell parse, analyzer, Command Prompt quoting, and real-install CI jobs |
 | WSL | covered by the Linux installer path; not separately exercised yet |
 
 Windows is not yet locally verified because PowerShell is unavailable on this Mac. The included
@@ -214,12 +198,6 @@ Remove the npm package with the same prefix used during installation:
 
 ```bash
 npm uninstall --global --prefix "$HOME/.local" @openai/codex
-```
-
-Remove the workshop skills only if you no longer want them:
-
-```bash
-rm -rf ~/.agents/skills/hire ~/.agents/skills/setup
 ```
 
 Then delete the `# added by codex-cli-installer` block from your shell rc.

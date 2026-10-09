@@ -39,18 +39,18 @@ else
   printf '  \033[33mSKIP\033[0m pwsh not installed\n'
 fi
 
-head2 "4. Codex-only destinations"
-# These are literal source-code patterns.
-# shellcheck disable=SC2016
-if grep -q '\$HOME/.agents/skills' install.sh && ! grep -q '\.claude' install.sh; then
-  pass "bash installer targets Codex skill paths only"
+head2 "4. Codex-only, and no public skill source"
+if ! grep -q '\.claude' install.sh && ! grep -q '\.claude' install.ps1; then
+  pass "installers never touch Claude Code paths"
 else
-  fail "bash installer contains a stale or incorrect skill destination"
+  fail "an installer references a Claude Code path"
 fi
-if grep -q "'.agents'" install.ps1 && ! grep -q '\.claude' install.ps1; then
-  pass "PowerShell installer targets Codex skill paths only"
+# The workshop skills are private. Neither installer may download them from a
+# public repo again.
+if ! grep -qE 'jtlgrowth/jtl|codeload\.github\.com' install.sh install.ps1; then
+  pass "no public skill download in either installer"
 else
-  fail "PowerShell installer contains a stale or incorrect skill destination"
+  fail "an installer still downloads skills from a public repo"
 fi
 if grep -q 'deb.nodesource.com/setup_22.x' install.sh; then
   pass "apt path installs Node 22 with npm"
@@ -86,68 +86,28 @@ for variant in "--dry-run" "--dry-run --minimal"; do
   fi
 done
 
-head2 "8. --skills"
-for variant in "--skills hire" "--skills=hire" "--skills hire,setup"; do
+head2 "8. Old --skills commands still run and point to the skills page"
+for variant in "--skills hire" "--skills=hire" "--skills hire,setup" "--skills" "--skills="; do
   # shellcheck disable=SC2086
   if out="$(bash install.sh --dry-run --minimal $variant 2>&1)"; then
-    if printf '%s' "$out" | grep -qE "would download:.*codeload\.github\.com/jtlgrowth/jtl|skill hire already installed"; then
-      pass "'$variant' plans the hire download"
+    if printf '%s' "$out" | grep -q 'jtlgrowth.com/skills'; then
+      pass "'$variant' points to the skills page"
     else
-      fail "'$variant' did not plan a skill install"
+      fail "'$variant' did not point to the skills page"
     fi
   else
     fail "'$variant' exited non-zero"
   fi
 done
 
-out="$(CXI_SKILLS=hire bash install.sh --dry-run --minimal 2>&1)"
-if printf '%s' "$out" | grep -qE "would download:.*jtlgrowth/jtl|skill hire already installed"; then
-  pass "CXI_SKILLS=hire works via the env var"
+out="$(CXI_SKILLS=hire,setup bash install.sh --dry-run --minimal 2>&1)"
+if printf '%s' "$out" | grep -q 'jtlgrowth.com/skills'; then
+  pass "CXI_SKILLS=hire,setup points to the skills page"
 else
   fail "CXI_SKILLS was ignored"
 fi
 
-# The skill must land where Codex CLI actually looks for it.
-# This is a literal source-code pattern.
-# shellcheck disable=SC2016
-if grep -q 'dest="$HOME/.agents/skills/$name"' install.sh; then
-  pass "target is ~/.agents/skills/hire"
-else
-  fail "skill target path changed"
-fi
-
-head2 "9. Unknown or empty --skills fails cleanly"
-code=0
-bash install.sh --skills nope --dry-run >/dev/null 2>&1 || code=$?
-if [ "$code" -eq 2 ]; then pass "unknown skill exits 2"; else fail "unknown skill exited $code - expected 2"; fi
-for variant in "--skills" "--skills="; do
-  code=0
-  bash install.sh "$variant" >/dev/null 2>&1 || code=$?
-  if [ "$code" -eq 2 ]; then
-    pass "'$variant' exits 2"
-  else
-    fail "'$variant' exited $code - expected 2"
-  fi
-done
-
-head2 "10. PowerShell skill install (the real functions, extracted)"
-if command -v pwsh >/dev/null 2>&1; then
-  ps_scratch="$(mktemp -d)"
-  if pwsh -NoProfile -File test/skill-install.ps1 ./install.ps1 "$ps_scratch" >/dev/null 2>&1; then
-    if [ -f "$ps_scratch/.agents/skills/hire/SKILL.md" ]; then
-      pass "install.ps1 downloads and extracts a skill, and re-running leaves it alone"
-    else
-      fail "PowerShell skill install produced no SKILL.md"
-    fi
-  else
-    fail "PowerShell skill install failed"
-  fi
-  printf '  scratch kept for inspection: %s\n' "$ps_scratch"
-else
-  printf '  \033[33mSKIP\033[0m pwsh not installed\n'
-fi
-
-head2 "11. sudo is refused"
+head2 "9. sudo is refused"
 out="$(SUDO_USER=someone bash install.sh --dry-run 2>&1 || true)"
 if [ "$(id -u)" -eq 0 ]; then
   if printf '%s' "$out" | grep -q "do not run this installer with sudo"; then

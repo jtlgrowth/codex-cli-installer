@@ -48,7 +48,7 @@ jobs:
         run: |
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
           $bad = 0
-          foreach ($f in @('./install.ps1', './test/skill-install.ps1')) {
+          foreach ($f in @('./install.ps1')) {
             $results = Invoke-ScriptAnalyzer -Path $f -Severity Error,Warning `
               -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions,PSAvoidUsingInvokeExpression
             if ($results) { Write-Host "findings in $f"; $results | Format-Table -AutoSize | Out-String | Write-Host; $bad++ }
@@ -65,12 +65,18 @@ jobs:
           ./install.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error "dry run exited $LASTEXITCODE"; exit 1 }
 
-      - name: Dry run (--skills hire, and via the env var)
+      # The skills moved behind a key. An old copied command must still exit 0
+      # and say where they went, not fail on the flag.
+      - name: An old --skills command still runs and points to the skills page
         shell: pwsh
         run: |
-          ./install.ps1 -DryRun -Yes -Skills hire
+          $out = ./install.ps1 -DryRun -Yes -Skills hire *>&1 | Out-String
+          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "-Skills did not point to the skills page"; exit 1 }
           $env:CXI_SKILLS = 'hire,setup'
-          ./install.ps1 -DryRun -Yes
+          $out = ./install.ps1 -DryRun -Yes *>&1 | Out-String
+          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "CXI_SKILLS did not point to the skills page"; exit 1 }
+          Write-Host "old skill commands point to the skills page"
+          exit 0
 
       # The cmd.exe form documented in the README, run through a real cmd.exe.
       # A quoting mistake here is invisible from pwsh - cmd has its own rules for
@@ -81,68 +87,33 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:CXI_SKILLS='hire,setup'; $env:CXI_DRY_RUN='1'; $env:CXI_YES='1'; ./install.ps1"
           if errorlevel 1 exit /b 1
 
-      # The Windows half of the student one-liner. This is the only job that
-      # runs it on Windows at all, so it downloads and extracts for real.
-      - name: Install the hire skill for real
+      - name: Install for real
         shell: pwsh
         run: |
-          $env:CXI_SKILLS = 'hire,setup'
           $env:CXI_YES = '1'
           ./install.ps1
-          $skill = Join-Path $env:USERPROFILE '.agents\skills\hire\SKILL.md'
-          if (-not (Test-Path $skill)) { Write-Error "hire skill not installed at $skill"; exit 1 }
-          node (Join-Path $env:USERPROFILE '.agents\skills\hire\test\tests.mjs')
-          if ($LASTEXITCODE -ne 0) { Write-Error "hire's own tests failed"; exit 1 }
-          $setup = Join-Path $env:USERPROFILE '.agents\skills\setup\SKILL.md'
-          if (-not (Test-Path $setup)) { Write-Error "setup skill not installed at $setup"; exit 1 }
-          node (Join-Path $env:USERPROFILE '.agents\skills\setup\test\tests.mjs')
-          if ($LASTEXITCODE -ne 0) { Write-Error "setup's own tests failed"; exit 1 }
-          Write-Host "hire + setup installed and their tests pass on Windows"
+          if ($LASTEXITCODE -ne 0) { Write-Error "install exited $LASTEXITCODE"; exit 1 }
 
-      # A Codex student's next steps, each in a fresh window: codex runs, /setup
-      # makes the alias, then a NEW window finds it in PowerShell and in cmd. The
-      # alias lives in ~/.local/bin, which this installer never adds to PATH, so
-      # this proves setup.mjs saves it. PATH is rebuilt from the registry each
-      # time, which is what a new window does.
-      - name: A new window finds codex and the vee alias (PowerShell and cmd)
+      # A student's next step: a NEW window finds codex in PowerShell and in cmd.
+      # PATH is rebuilt from the registry, which is what a new window does.
+      - name: A new window finds codex (PowerShell and cmd)
         shell: pwsh
         run: |
           function New-Window { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') }
           New-Window
           $cv = (codex --version 2>&1 | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) { Write-Error "codex not found from a new window: $cv"; exit 1 }
-          node (Join-Path $env:USERPROFILE '.agents\skills\setup\scripts\setup.mjs') --host codex --name Vee --alias vee
-          if ($LASTEXITCODE -ne 0) { Write-Error "setup --alias failed"; exit 1 }
-          New-Window
-          $pv = (vee --version 2>&1 | Out-String).Trim()
-          if ($pv -ne $cv) { Write-Error "vee in PowerShell printed '$pv', codex printed '$cv'"; exit 1 }
-          $mv = (cmd /c "vee --version" 2>&1 | Out-String).Trim()
-          if ($mv -ne $cv) { Write-Error "vee in cmd printed '$mv', codex printed '$cv'"; exit 1 }
-          Write-Host "new window: $cv, vee works in PowerShell and cmd"
+          $mv = (cmd /c "codex --version" 2>&1 | Out-String).Trim()
+          if ($mv -ne $cv) { Write-Error "codex in cmd printed '$mv', PowerShell printed '$cv'"; exit 1 }
+          Write-Host "new window: $cv in PowerShell and cmd"
           exit 0
 
-      - name: Re-running must leave the skill alone
+      - name: Re-running is safe
         shell: pwsh
         run: |
-          $skill = Join-Path $env:USERPROFILE '.agents\skills\hire'
-          $before = (Get-ChildItem $skill -Recurse -File).Count
-          $env:CXI_SKILLS = 'hire'; $env:CXI_YES = '1'
-          # *>&1 merges the information stream: the installer reports through
-          # Write-Host, which a plain pipeline does not capture.
-          $out = ./install.ps1 *>&1 | Out-String
-          $after = (Get-ChildItem $skill -Recurse -File).Count
-          if ($before -ne $after) { Write-Error "file count changed $before -> $after"; exit 1 }
-          if ($out -notmatch 'already present') { Write-Error "re-run did not report the skill as present"; exit 1 }
-          Write-Host "re-run left the skill alone ($after files)"
-
-      # Run in a child process so the script's own exit code is observable —
-      # dot-sourcing it into this step would surface a throw, not an exit code.
-      - name: Invalid skill is rejected with exit 2
-        shell: pwsh
-        run: |
-          pwsh -NoProfile -File ./install.ps1 -DryRun -Yes -Skills nope
-          if ($LASTEXITCODE -ne 2) { Write-Error "expected exit 2, got $LASTEXITCODE"; exit 1 }
-          Write-Host "invalid skill rejected with exit 2"
+          $env:CXI_YES = '1'
+          ./install.ps1
+          if ($LASTEXITCODE -ne 0) { Write-Error "re-run exited $LASTEXITCODE"; exit 1 }
           exit 0
 
   install-linux:
@@ -155,18 +126,10 @@ jobs:
 
       - uses: actions/checkout@v5
 
-      - name: Install for real, with the skill the students get
+      - name: Install for real
         env:
           CXI_YES: '1'
-          CXI_SKILLS: hire,setup
         run: bash install.sh
-
-      - name: The hire skill is installed and its own tests pass
-        run: |
-          test -f "$HOME/.agents/skills/hire/SKILL.md" || { echo "hire not installed"; exit 1; }
-          node "$HOME/.agents/skills/hire/test/tests.mjs"
-          test -f "$HOME/.agents/skills/setup/SKILL.md" || { echo "setup not installed"; exit 1; }
-          node "$HOME/.agents/skills/setup/test/tests.mjs"
 
       - name: Verify Codex is on PATH
         run: |
@@ -176,13 +139,9 @@ jobs:
       - name: Re-run must be idempotent
         env:
           CXI_YES: '1'
-          CXI_SKILLS: hire,setup
         run: |
           before=$(grep -c 'codex-cli-installer' "$HOME/.bashrc" || true)
-          files_before=$(find "$HOME/.agents/skills/hire" -type f | wc -l)
           bash install.sh
           after=$(grep -c 'codex-cli-installer' "$HOME/.bashrc" || true)
-          files_after=$(find "$HOME/.agents/skills/hire" -type f | wc -l)
-          echo "marker count: $before -> $after   skill files: $files_before -> $files_after"
+          echo "marker count: $before -> $after"
           [ "$before" = "$after" ] || { echo "shell rc grew on re-run"; exit 1; }
-          [ "$files_before" = "$files_after" ] || { echo "skill was re-downloaded"; exit 1; }
