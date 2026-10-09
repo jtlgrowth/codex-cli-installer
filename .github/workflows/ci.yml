@@ -65,17 +65,17 @@ jobs:
           ./install.ps1
           if ($LASTEXITCODE -ne 0) { Write-Error "dry run exited $LASTEXITCODE"; exit 1 }
 
-      # The skills moved behind a key. An old copied command must still exit 0
-      # and say where they went, not fail on the flag.
-      - name: An old --skills command still runs and points to the skills page
+      # The skills are private now. An old copied command must still exit 0
+      # and print the notice, not fail on the flag.
+      - name: An old --skills command still runs and prints the notice
         shell: pwsh
         run: |
           $out = ./install.ps1 -DryRun -Yes -Skills hire *>&1 | Out-String
-          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "-Skills did not point to the skills page"; exit 1 }
+          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "-Skills did not print the notice"; exit 1 }
           $env:CXI_SKILLS = 'hire,setup'
           $out = ./install.ps1 -DryRun -Yes *>&1 | Out-String
-          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "CXI_SKILLS did not point to the skills page"; exit 1 }
-          Write-Host "old skill commands point to the skills page"
+          if ($out -notmatch 'jtlgrowth\.com/skills') { Write-Error "CXI_SKILLS did not print the notice"; exit 1 }
+          Write-Host "old skill commands print the notice"
           exit 0
 
       # The cmd.exe form documented in the README, run through a real cmd.exe.

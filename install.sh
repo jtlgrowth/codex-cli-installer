@@ -107,11 +107,9 @@ ask() {
 
 # ------------------------------------------------------------------ skills ----
 
-# The workshop skills no longer install from this public installer. They are
-# private, and the key-gated Claude Code installer carries them for Codex too.
-# --skills / CXI_SKILLS still parse so an old copied command installs Codex
-# and says where the skills went, instead of failing on an unknown flag.
-SKILLS_MOVED_URL="https://jtlgrowth.com/skills/"
+# The workshop skills are private and no longer install from this public
+# installer. --skills / CXI_SKILLS still parse so an old copied command installs
+# Codex and gets a notice, instead of failing on an unknown flag.
 
 usage() {
   cat <<USAGE
@@ -533,9 +531,8 @@ install_codex() {
 install_skills() {
   [ -z "$SKILLS" ] && return 0
   step "Skills"
-  warn "the workshop skills no longer install from here"
-  say "     open $SKILLS_MOVED_URL, enter your workshop code, run the Codex line there"
-  SKIPPED+=("skills (moved to $SKILLS_MOVED_URL)")
+  warn "this installer does not install skills; your workshop host gives you that line"
+  SKIPPED+=("skills (not installed by this installer)")
 }
 
 # ----------------------------------------------------------------- verify ----

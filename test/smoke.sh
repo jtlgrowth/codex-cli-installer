@@ -86,14 +86,14 @@ for variant in "--dry-run" "--dry-run --minimal"; do
   fi
 done
 
-head2 "8. Old --skills commands still run and point to the skills page"
+head2 "8. Old --skills commands still run and print the notice"
 for variant in "--skills hire" "--skills=hire" "--skills hire,setup" "--skills" "--skills="; do
   # shellcheck disable=SC2086
   if out="$(bash install.sh --dry-run --minimal $variant 2>&1)"; then
-    if printf '%s' "$out" | grep -q 'jtlgrowth.com/skills'; then
-      pass "'$variant' points to the skills page"
+    if printf '%s' "$out" | grep -q 'does not install skills'; then
+      pass "'$variant' prints the notice"
     else
-      fail "'$variant' did not point to the skills page"
+      fail "'$variant' did not print the notice"
     fi
   else
     fail "'$variant' exited non-zero"
@@ -101,8 +101,8 @@ for variant in "--skills hire" "--skills=hire" "--skills hire,setup" "--skills" 
 done
 
 out="$(CXI_SKILLS=hire,setup bash install.sh --dry-run --minimal 2>&1)"
-if printf '%s' "$out" | grep -q 'jtlgrowth.com/skills'; then
-  pass "CXI_SKILLS=hire,setup points to the skills page"
+if printf '%s' "$out" | grep -q 'does not install skills'; then
+  pass "CXI_SKILLS=hire,setup prints the notice"
 else
   fail "CXI_SKILLS was ignored"
 fi

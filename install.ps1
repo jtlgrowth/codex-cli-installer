@@ -41,9 +41,9 @@ $RepoRaw           = 'https://raw.githubusercontent.com/jtlgrowth/codex-cli-inst
 $CodexPackage      = '@openai/codex@latest'
 $NodeMinMajor      = 20
 
-# The workshop skills no longer install from this public installer. They are
-# private, and the key-gated Claude Code installer carries them for Codex too.
-$SkillsMovedUrl = 'https://jtlgrowth.com/skills/'
+# The workshop skills are private and no longer install from this public
+# installer. An old command that still passes them gets a notice, not an error.
+$script:SkillsRequested = [bool]$Skills
 
 if ($env:CXI_MINIMAL -eq '1') { $Minimal = $true }
 if ($env:CXI_YES     -eq '1') { $Yes     = $true }
@@ -350,11 +350,10 @@ function Update-SessionPath {
 # --------------------------------------------------------------- skills -----
 
 function Install-Skill {
-    if (-not $Skills) { return }
+    if (-not $script:SkillsRequested) { return }
     Write-Step "Skills"
-    Write-Warn2 "the workshop skills no longer install from here"
-    Write-Host "     open $SkillsMovedUrl, enter your workshop code, run the Codex line there"
-    $script:Skipped.Add("skills (moved to $SkillsMovedUrl)")
+    Write-Warn2 "this installer does not install skills; your workshop host gives you that line"
+    $script:Skipped.Add("skills (not installed by this installer)")
 }
 
 # --------------------------------------------------------------- verify -----

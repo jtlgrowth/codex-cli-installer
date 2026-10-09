@@ -146,10 +146,9 @@ irm https://raw.githubusercontent.com/jtlgrowth/codex-cli-installer/main/install
 
 ## Workshop skills
 
-The JTL workshop skills are private and no longer install from this repository. Workshop
-attendees get them at [jtlgrowth.com/skills](https://jtlgrowth.com/skills/) with the code from
-the room. An old command that still passes `--skills` or `CXI_SKILLS` installs Codex as usual
-and prints that link.
+The JTL workshop skills are private and do not install from this repository. Workshop
+attendees get their install line from the workshop host. An old command that still passes
+`--skills` or `CXI_SKILLS` installs Codex as usual and prints a one-line notice.
 
 ## Troubleshooting
 
